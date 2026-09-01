@@ -39,7 +39,7 @@ async function renderCheckout() {
         </div>
       </div>
       <button type="submit" class="pay-btn" id="pay-btn">
-        LINE Pay 付款
+        前往付款
       </button>
     </form>
   `;
@@ -63,14 +63,27 @@ async function renderCheckout() {
       });
     } catch (err) {
       btn.disabled = false;
-      btn.textContent = 'LINE Pay 付款';
+      btn.textContent = '前往付款';
       showToast('發生錯誤：' + err.message);
     }
   });
 }
 
 async function startCheckout(orderData) {
-  const result = await callEdgeFunction('line-pay-request', orderData);
+  const result = await callEdgeFunction('ecpay-create-order', orderData);
   localStorage.setItem('ycg_pending_order', result.orderId);
-  window.location.href = result.paymentUrl;
+
+  // 建立隱藏表單並自動送出至 ECPay
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = result.ecpayUrl;
+  for (const [key, value] of Object.entries(result.params)) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }

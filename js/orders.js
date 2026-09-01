@@ -1,27 +1,30 @@
 async function renderOrderConfirm() {
   const app = document.getElementById('app');
-  app.innerHTML = '<div class="loading">確認付款中，請稍候...</div>';
+  app.innerHTML = '<div class="loading">確認付款狀態中，請稍候...</div>';
 
-  const params = new URLSearchParams(window.location.search);
-  const transactionId = params.get('transactionId');
   const orderId = localStorage.getItem('ycg_pending_order');
-
-  if (!transactionId || !orderId) {
+  if (!orderId) {
     app.innerHTML = `
       <div class="error-page">
-        <h2>❌ 付款資訊不完整</h2>
-        <p>請聯絡客服或重新下單</p>
+        <h2>❌ 找不到訂單資訊</h2>
+        <p>請聯絡客服確認付款狀態</p>
         <button onclick="window.location='?page=products'">回到商店</button>
       </div>
     `;
     return;
   }
 
-  try {
-    await callEdgeFunction('line-pay-confirm', { orderId, transactionId });
+  // 輪詢等待 ECPay webhook 更新訂單狀態（最多等 8 秒）
+  let status = 'pending';
+  for (let i = 0; i < 8; i++) {
+    const { data: order } = await db.from('orders').select('status').eq('id', orderId).single();
+    if (order?.status === 'paid') { status = 'paid'; break; }
+    if (i < 7) await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (status === 'paid') {
     localStorage.removeItem('ycg_cart');
     localStorage.removeItem('ycg_pending_order');
-
     app.innerHTML = `
       <div class="success-page">
         <div class="success-icon">✅</div>
@@ -33,12 +36,14 @@ async function renderOrderConfirm() {
         <button onclick="window.location='?page=products'">繼續購物</button>
       </div>
     `;
-  } catch (err) {
+  } else {
     app.innerHTML = `
       <div class="error-page">
-        <h2>❌ 付款確認失敗</h2>
-        <p>${err.message}</p>
-        <button onclick="window.location='?page=cart'">返回購物車</button>
+        <h2>⏳ 付款確認中</h2>
+        <p>若已完成付款，訂單通常在數分鐘內更新</p>
+        <p>如有疑問請聯絡客服並提供訂單編號：</p>
+        <p class="order-id">${orderId.slice(0, 8).toUpperCase()}</p>
+        <button onclick="renderOrderConfirm()">重新確認</button>
         <button onclick="window.location='?page=products'">回到商店</button>
       </div>
     `;
