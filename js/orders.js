@@ -106,3 +106,112 @@ async function renderOrders() {
     app.innerHTML = `<p class="error">載入失敗：${err.message}</p>`;
   }
 }
+
+async function renderLinePayConfirm() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<div class="loading">LINE Pay 確認中，請稍候...</div>';
+
+  const params        = new URLSearchParams(window.location.search);
+  const transactionId = params.get('transactionId');
+  const orderId       = params.get('orderId') || localStorage.getItem('ycg_pending_order');
+
+  if (!transactionId || !orderId) {
+    app.innerHTML = `
+      <div class="error-page">
+        <h2>❌ 缺少付款資訊</h2>
+        <p>請聯絡客服確認付款狀態</p>
+        <button onclick="window.location='?page=products'">回到商店</button>
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    await callEdgeFunction('line-pay-confirm', { transactionId, orderId });
+    localStorage.removeItem('ycg_cart');
+    localStorage.removeItem('ycg_pending_order');
+    window.location.href = '?page=order-confirm';
+  } catch (err) {
+    app.innerHTML = `
+      <div class="error-page">
+        <h2>❌ 付款確認失敗</h2>
+        <p>${err.message}</p>
+        <p>訂單編號：${orderId.slice(0, 8).toUpperCase()}</p>
+        <p>請聯絡客服，提供上方訂單編號</p>
+        <button onclick="window.location='?page=products'">回到商店</button>
+      </div>
+    `;
+  }
+}
+
+async function renderAdminOrders() {
+  const app = document.getElementById('app');
+
+  if (window.__profile.userId !== CONFIG.ADMIN_USER_ID) {
+    app.innerHTML = '<div class="error-page"><p>無存取權限</p></div>';
+    return;
+  }
+
+  app.innerHTML = '<div class="loading">載入訂單中...</div>';
+
+  const STATUS_LABEL = {
+    pending:   '⏳ 待付款',
+    paid:      '✅ 已付款',
+    shipped:   '🚚 已出貨',
+    completed: '🎉 已完成',
+    cancelled: '❌ 已取消',
+    refunded:  '↩️ 已退款',
+  };
+
+  try {
+    const { data: orders, error } = await db
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+
+    app.innerHTML = `
+      <div class="page-header">
+        <button onclick="window.location='?page=products'">← 商店</button>
+        <h2>後台訂單</h2><span></span>
+      </div>
+      <div class="order-list">
+        ${orders.map(o => `
+          <div class="order-card">
+            <div class="order-header">
+              <span class="order-id-text">${o.id.slice(0, 8).toUpperCase()}</span>
+              <span class="order-status">${STATUS_LABEL[o.status] || o.status}</span>
+            </div>
+            <div class="order-items">
+              <p>${o.line_display_name || o.line_user_id}</p>
+              ${o.items.map(i => `<p>${i.name} × ${i.qty}</p>`).join('')}
+              <p>${o.shipping_name} ${o.shipping_phone}</p>
+              <p style="font-size:12px;color:#888">${o.payment_method === 'line_pay' ? 'LINE Pay' : 'ECPay'}</p>
+            </div>
+            <div class="order-footer">
+              <span class="order-date">${new Date(o.created_at).toLocaleDateString('zh-TW')}</span>
+              <span class="order-total">NT$ ${o.total_amount.toLocaleString()}</span>
+            </div>
+            ${o.payment_method === 'line_pay' && o.status === 'paid' ? `
+              <button class="refund-btn" onclick="handleRefund('${o.id}', ${o.total_amount})">退款 NT$ ${o.total_amount.toLocaleString()}</button>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    app.innerHTML = `<p class="error">載入失敗：${err.message}</p>`;
+  }
+}
+
+async function handleRefund(orderId, amount) {
+  if (!confirm(`確定要退款 NT$ ${amount.toLocaleString()} 給此訂單嗎？`)) return;
+  try {
+    await callEdgeFunction('line-pay-refund', { orderId });
+    showToast('退款成功');
+    renderAdminOrders();
+  } catch (err) {
+    showToast('退款失敗：' + err.message);
+  }
+}

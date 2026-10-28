@@ -14,9 +14,11 @@ async function initApp() {
     return;
   }
 
-  const params = new URLSearchParams(window.location.search);
-  const page = params.get('page') || 'products';
+  const params    = new URLSearchParams(window.location.search);
+  const page      = params.get('page') || 'products';
   const productId = params.get('product');
+
+  const infoPages = ['store-info', 'return-policy', 'terms', 'shopping-guide'];
 
   if (page === 'product' && productId) {
     renderProductDetail(productId);
@@ -26,8 +28,14 @@ async function initApp() {
     renderCheckout();
   } else if (page === 'order-confirm') {
     renderOrderConfirm();
+  } else if (page === 'line-pay-confirm') {
+    renderLinePayConfirm();
   } else if (page === 'orders') {
     renderOrders();
+  } else if (page === 'admin-orders') {
+    renderAdminOrders();
+  } else if (infoPages.includes(page)) {
+    renderInfoPage(page);
   } else {
     renderProductList();
   }

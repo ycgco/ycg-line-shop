@@ -1,0 +1,2 @@
+ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'ecpay';
+ALTER TABLE orders ADD COLUMN refunded_at TIMESTAMPTZ;
