@@ -163,18 +163,19 @@ async function renderAdminOrders() {
     refunded:  '↩️ 已退款',
   };
 
+  const memberFilter = new URLSearchParams(window.location.search).get('member');
+
   try {
-    const { data: orders, error } = await db
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
+    let q = db.from('orders').select('*').order('created_at', { ascending: false }).limit(200);
+    if (memberFilter) q = q.eq('line_user_id', memberFilter);
+    const { data: orders, error } = await q;
     if (error) throw new Error(error.message);
 
     app.innerHTML = `
       <div class="page-header">
-        <button onclick="window.location='?page=products'">← 商店</button>
-        <h2>後台訂單</h2><span></span>
+        <button onclick="window.location='?page=${memberFilter ? 'admin-members' : 'products'}'">← ${memberFilter ? '會員' : '商店'}</button>
+        <h2>${memberFilter ? '會員訂單' : '後台訂單'}</h2>
+        ${!memberFilter ? `<button onclick="window.location='?page=admin-members'" style="font-size:12px;padding:4px 8px;">👥 會員</button>` : '<span></span>'}
       </div>
       <div class="order-list">
         ${orders.map(o => `
@@ -198,6 +199,84 @@ async function renderAdminOrders() {
             ` : ''}
           </div>
         `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    app.innerHTML = `<p class="error">載入失敗：${err.message}</p>`;
+  }
+}
+
+async function renderAdminMembers() {
+  const app = document.getElementById('app');
+
+  if (window.__profile.userId !== CONFIG.ADMIN_USER_ID) {
+    app.innerHTML = '<div class="error-page"><p>無存取權限</p></div>';
+    return;
+  }
+
+  app.innerHTML = '<div class="loading">載入會員中...</div>';
+
+  try {
+    const { data: members, error: mErr } = await db
+      .from('members')
+      .select('*')
+      .order('total_spent', { ascending: false });
+    if (mErr) throw new Error(mErr.message);
+
+    const { data: orders, error: oErr } = await db
+      .from('orders')
+      .select('line_user_id, status, total_amount');
+    if (oErr) throw new Error(oErr.message);
+
+    const orderMap = {};
+    for (const o of orders) {
+      if (!orderMap[o.line_user_id]) orderMap[o.line_user_id] = { count: 0, paid: 0 };
+      orderMap[o.line_user_id].count++;
+      if (o.status === 'paid' || o.status === 'shipped' || o.status === 'completed') {
+        orderMap[o.line_user_id].paid++;
+      }
+    }
+
+    app.innerHTML = `
+      <div class="page-header">
+        <button onclick="window.location='?page=admin-orders'">← 訂單</button>
+        <h2>後台會員 (${members.length})</h2><span></span>
+      </div>
+      <div class="admin-summary">
+        <div class="summary-stat">
+          <span class="stat-num">${members.length}</span>
+          <span class="stat-label">總會員</span>
+        </div>
+        <div class="summary-stat">
+          <span class="stat-num">NT$ ${members.reduce((s, m) => s + (m.total_spent || 0), 0).toLocaleString()}</span>
+          <span class="stat-label">總消費</span>
+        </div>
+        <div class="summary-stat">
+          <span class="stat-num">${orders.length}</span>
+          <span class="stat-label">總訂單</span>
+        </div>
+      </div>
+      <div class="order-list">
+        ${members.map(m => {
+          const info = orderMap[m.line_user_id] || { count: 0, paid: 0 };
+          return `
+            <div class="order-card member-card">
+              <div class="member-row">
+                ${m.avatar_url ? `<img src="${m.avatar_url}" class="member-avatar">` : '<div class="member-avatar-placeholder"></div>'}
+                <div class="member-info">
+                  <span class="member-name">${m.display_name || m.line_user_id}</span>
+                  <span class="member-since">加入 ${new Date(m.created_at).toLocaleDateString('zh-TW')}</span>
+                </div>
+                <div class="member-spent">NT$ ${(m.total_spent || 0).toLocaleString()}</div>
+              </div>
+              <div class="member-stats">
+                <span>訂單 ${info.count} 筆</span>
+                <span>已付款 ${info.paid} 筆</span>
+                <button class="member-orders-btn" onclick="window.location='?page=admin-orders&member=${m.line_user_id}'">查看訂單</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
   } catch (err) {

@@ -34,6 +34,8 @@ async function initApp() {
     renderOrders();
   } else if (page === 'admin-orders') {
     renderAdminOrders();
+  } else if (page === 'admin-members') {
+    renderAdminMembers();
   } else if (infoPages.includes(page)) {
     renderInfoPage(page);
   } else {
