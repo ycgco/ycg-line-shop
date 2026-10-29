@@ -2,9 +2,9 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { linePayHeaders, LINE_PAY_BASE } from '../_shared/line-pay.ts';
 
-const CHANNEL_ID     = Deno.env.get('LINE_PAY_CHANNEL_ID')!;
-const CHANNEL_SECRET = Deno.env.get('LINE_PAY_CHANNEL_SECRET')!;
-const IS_SANDBOX     = Deno.env.get('LINE_PAY_SANDBOX') !== 'false';
+const CHANNEL_ID     = (Deno.env.get('LINE_PAY_CHANNEL_ID') ?? '').trim();
+const CHANNEL_SECRET = (Deno.env.get('LINE_PAY_CHANNEL_SECRET') ?? '').trim();
+const IS_SANDBOX     = (Deno.env.get('LINE_PAY_SANDBOX') ?? '').trim().toLowerCase() !== 'false';
 const BASE_URL       = IS_SANDBOX ? LINE_PAY_BASE.sandbox : LINE_PAY_BASE.prod;
 
 const cors = {

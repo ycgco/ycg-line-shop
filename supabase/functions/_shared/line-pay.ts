@@ -10,7 +10,7 @@ export async function linePayHeaders(
   body: string,
 ): Promise<Record<string, string>> {
   const nonce   = crypto.randomUUID();
-  const message = `${channelSecret}\n${uri}\n${body}\n${nonce}`;
+  const message = `${channelSecret}${uri}${body}${nonce}`;
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(channelSecret),
